@@ -20,33 +20,32 @@ func TestWrite(t *testing.T) {
 
 	err = store.Write("hello", "world")
 	assertNoError(t, err)
-
-	assertMapSize(t, "offsets", store.log, 1)
 }
 
 func TestRead(t *testing.T) {
-	name := createFilePath(t)
 
-	store, err := NewStore(name)
-	assertNoError(t, err)
+	t.Run("read value for key", func(t *testing.T) {
+		store := storeWithPairs(t, pair{key: "hello", value: "world"})
 
-	err = store.Write("hello", "world")
-	assertNoError(t, err)
+		value, err := store.Read("hello")
+		assertNoError(t, err)
 
-	value, err := store.Read("hello")
-	assertNoError(t, err)
+		if value != "world" {
+			t.Errorf("expected %v but got %v", "world", value)
+		}
+	})
 
-	if value != "world" {
-		t.Errorf("expected %v got %v", "world", value)
-	}
-}
+	t.Run("read missing key gives error", func(t *testing.T) {
+		store := emptyStore(t)
+		value, err := store.Read("hello")
 
-func assertMapSize(t testing.TB, name string, m map[string]logEntry, want int) {
-	t.Helper()
+		if value != "" {
+			t.Errorf("expected \"\" but got %v", value)
+		}
 
-	if len(m) != want {
-		t.Errorf("expected %v to have %d keys, got %d", name, want, len(m))
-	}
+		assertError(t, err, ErrKeyNotFound("hello"))
+	})
+
 }
 
 func assertNoError(t testing.TB, got error) {
@@ -57,8 +56,46 @@ func assertNoError(t testing.TB, got error) {
 	}
 }
 
+func assertError(t testing.TB, got error, want error) {
+	t.Helper()
+
+	if got == nil {
+		t.Fatal("wanted an error but didn't get one")
+	}
+
+	if got.Error() != want.Error() {
+		t.Errorf("expected %v got %q", want, got)
+	}
+}
+
 func createFilePath(t testing.TB) string {
 	t.Helper()
 
 	return path.Join(t.TempDir(), "test.gokv")
+}
+
+func emptyStore(t testing.TB) *Store {
+	t.Helper()
+
+	store, err := NewStore(createFilePath(t))
+	assertNoError(t, err)
+
+	return store
+}
+
+type pair struct {
+	key   string
+	value string
+}
+
+func storeWithPairs(t testing.TB, pairs ...pair) *Store {
+	t.Helper()
+
+	store := emptyStore(t)
+	for _, pair := range pairs {
+		err := store.Write(pair.key, pair.value)
+		assertNoError(t, err)
+	}
+
+	return store
 }

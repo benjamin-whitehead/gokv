@@ -44,6 +44,10 @@ func (s *Store) Write(key string, value string) error {
 }
 
 func (s *Store) Read(key string) (string, error) {
+	if _, ok := s.log[key]; !ok {
+		return "", ErrKeyNotFound(key)
+	}
+
 	length := s.log[key].length
 	offset := s.log[key].offset
 
@@ -60,6 +64,12 @@ func (s *Store) Read(key string) (string, error) {
 	}
 
 	return string(readBuffer), nil
+}
+
+func (s *Store) Delete(key string) error {
+	delete(s.log, key)
+
+	return nil
 }
 
 type logEntry struct {
