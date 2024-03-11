@@ -35,13 +35,31 @@ func TestRead(t *testing.T) {
 		}
 	})
 
-	t.Run("read missing key gives error", func(t *testing.T) {
+	t.Run("missing key gives error", func(t *testing.T) {
 		store := emptyStore(t)
 		value, err := store.Read("hello")
 
 		if value != "" {
 			t.Errorf("expected \"\" but got %v", value)
 		}
+
+		assertError(t, err, ErrKeyNotFound("hello"))
+	})
+
+}
+
+func TestDelete(t *testing.T) {
+
+	t.Run("delete value for key", func(t *testing.T) {
+		store := storeWithPairs(t, pair{key: "hello", value: "world"})
+
+		err := store.Delete("hello")
+		assertNoError(t, err)
+	})
+
+	t.Run("missing key gives error", func(t *testing.T) {
+		store := emptyStore(t)
+		err := store.Delete("hello")
 
 		assertError(t, err, ErrKeyNotFound("hello"))
 	})

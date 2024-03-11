@@ -67,6 +67,10 @@ func (s *Store) Read(key string) (string, error) {
 }
 
 func (s *Store) Delete(key string) error {
+	if _, ok := s.log[key]; !ok {
+		return ErrKeyNotFound(key)
+	}
+
 	delete(s.log, key)
 
 	return nil
