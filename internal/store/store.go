@@ -1,8 +1,10 @@
 package store
 
 import (
+	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 type Store struct {
@@ -24,8 +26,13 @@ func NewStore(name string) (*Store, error) {
 	}, nil
 }
 
+func NewStoreFromFile(path string) (*Store, error) {
+	return nil, nil
+}
+
 func (s *Store) Write(key string, value string) error {
-	_, err := s.file.Write([]byte(value))
+	entry := []byte(fmt.Sprintf("%s:::%s", key, value))
+	_, err := s.file.Write(entry)
 	if err != nil {
 		return err
 	}
@@ -37,7 +44,7 @@ func (s *Store) Write(key string, value string) error {
 
 	s.log[key] = logEntry{
 		offset: int(offset),
-		length: len(value),
+		length: len(entry),
 	}
 
 	return nil
@@ -58,12 +65,23 @@ func (s *Store) Read(key string) (string, error) {
 		return "", err
 	}
 
-	_, err = s.file.ReadAt(readBuffer, int64(offset-length))
+	_, err = s.file.ReadAt(readBuffer, int64(offset-(length)))
 	if err != nil {
 		return "", err
 	}
 
-	return string(readBuffer), nil
+	entry := strings.Split(string(readBuffer), ":::")
+	if len(entry) != 2 {
+		return "", ErrDecodeEntry
+	}
+
+	readKey, readValue := entry[0], entry[1]
+	if readKey != key {
+		return "", ErrReadIncorrectKey(key, readKey)
+
+	}
+
+	return readValue, nil
 }
 
 func (s *Store) Delete(key string) error {
