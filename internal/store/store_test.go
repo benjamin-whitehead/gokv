@@ -12,6 +12,29 @@ func TestCreateStore(t *testing.T) {
 	assertNoError(t, err)
 }
 
+func TestCreateStoreFromFile(t *testing.T) {
+
+	t.Run("missing file gives error", func(t *testing.T) {
+		store, err := NewStoreFromFile("hello")
+
+		assertError(t, err, ErrFileNotFound("hello"))
+
+		if store != nil {
+			t.Error("expected store to be nil, but got value")
+		}
+	})
+
+	t.Run("existing store is recreated", func(t *testing.T) {
+		store := storeWithPairs(t, pair{key: "hello", value: "world"})
+		storeFile := store.file.Name()
+
+		_, err := NewStoreFromFile(storeFile)
+		assertNoError(t, err)
+
+	})
+
+}
+
 func TestWrite(t *testing.T) {
 	name := createFilePath(t)
 
@@ -99,11 +122,6 @@ func emptyStore(t testing.TB) *Store {
 	assertNoError(t, err)
 
 	return store
-}
-
-type pair struct {
-	key   string
-	value string
 }
 
 func storeWithPairs(t testing.TB, pairs ...pair) *Store {

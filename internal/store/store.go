@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -27,11 +28,24 @@ func NewStore(name string) (*Store, error) {
 }
 
 func NewStoreFromFile(path string) (*Store, error) {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return nil, ErrFileNotFound(path)
+	}
+
+	_, err := os.OpenFile(path, os.O_RDWR, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: Finish implementing
+	// We are going to need to know where each entry we are parsing from is in the file
+	// So we can write the offset into the log
+
 	return nil, nil
 }
 
 func (s *Store) Write(key string, value string) error {
-	entry := []byte(fmt.Sprintf("%s:::%s", key, value))
+	entry := []byte(fmt.Sprintf("%s:::%s\n", key, value))
 	_, err := s.file.Write(entry)
 	if err != nil {
 		return err
@@ -70,15 +84,14 @@ func (s *Store) Read(key string) (string, error) {
 		return "", err
 	}
 
-	entry := strings.Split(string(readBuffer), ":::")
-	if len(entry) != 2 {
-		return "", ErrDecodeEntry
+	pair, err := parsePairFromBuffer(readBuffer)
+	if err != nil {
+		return "", err
 	}
 
-	readKey, readValue := entry[0], entry[1]
+	readKey, readValue := pair.key, pair.value
 	if readKey != key {
 		return "", ErrReadIncorrectKey(key, readKey)
-
 	}
 
 	return readValue, nil
@@ -92,6 +105,23 @@ func (s *Store) Delete(key string) error {
 	delete(s.log, key)
 
 	return nil
+}
+
+func parsePairFromBuffer(buffer []byte) (pair, error) {
+	entry := strings.Split(string(buffer), ":::")
+	if len(entry) != 2 {
+		return pair{}, ErrDecodeEntry
+	}
+
+	key, value := entry[0], entry[1]
+	trimmedValue := strings.TrimSuffix(value, "\n")
+
+	return pair{key: key, value: trimmedValue}, nil
+}
+
+type pair struct {
+	key   string
+	value string
 }
 
 type logEntry struct {
