@@ -17,4 +17,8 @@ func ErrFileNotFound(name string) error {
 	return fmt.Errorf("can't open file %v, file not found", name)
 }
 
+func ErrSnapshotFileNotFound(name string) error {
+	return fmt.Errorf("can't find snapshot file %v", name)
+}
+
 var ErrDecodeEntry = errors.New("can't decode entry from file")

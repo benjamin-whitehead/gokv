@@ -1,6 +1,8 @@
 package store
 
 import (
+	"bytes"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"io"
@@ -9,8 +11,9 @@ import (
 )
 
 type Store struct {
-	file *os.File
-	log  map[string]logEntry
+	file     *os.File
+	snapshot *os.File
+	log      map[string]logEntry
 }
 
 func NewStore(name string) (*Store, error) {
@@ -19,29 +22,64 @@ func NewStore(name string) (*Store, error) {
 		return nil, err
 	}
 
-	log := make(map[string]logEntry)
-
-	return &Store{
-		file: file,
-		log:  log,
-	}, nil
-}
-
-func NewStoreFromFile(path string) (*Store, error) {
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return nil, ErrFileNotFound(path)
-	}
-
-	_, err := os.OpenFile(path, os.O_RDWR, 0644)
+	snapshot, err := os.OpenFile(snapshotFileFromPath(name), os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO: Finish implementing
-	// We are going to need to know where each entry we are parsing from is in the file
-	// So we can write the offset into the log
+	log := make(map[string]logEntry)
 
-	return nil, nil
+	return &Store{
+		file:     file,
+		snapshot: snapshot,
+		log:      log,
+	}, nil
+}
+
+func NewStoreFromFile(path string) (*Store, error) {
+	if !fileExists(path) {
+		return nil, ErrFileNotFound(path)
+	}
+
+	snapshotFilePath := snapshotFileFromPath(path)
+	if !fileExists(snapshotFilePath) {
+		return nil, ErrSnapshotFileNotFound(snapshotFilePath)
+	}
+
+	file, err := os.OpenFile(path, os.O_RDWR, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot, err := os.OpenFile(snapshotFilePath, os.O_RDWR, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshotStat, err := snapshot.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	log := make(map[string]logEntry)
+	buffer := make([]byte, snapshotStat.Size())
+
+	_, err = snapshot.Read(buffer)
+	if err != nil {
+		return nil, err
+	}
+
+	decoder := gob.NewDecoder(bytes.NewReader(buffer))
+	err = decoder.Decode(&log)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Store{
+		file:     file,
+		snapshot: snapshot,
+		log:      log,
+	}, nil
 }
 
 func (s *Store) Write(key string, value string) error {
@@ -57,8 +95,8 @@ func (s *Store) Write(key string, value string) error {
 	}
 
 	s.log[key] = logEntry{
-		offset: int(offset),
-		length: len(entry),
+		Offset: int(offset),
+		Length: len(entry),
 	}
 
 	return nil
@@ -69,8 +107,8 @@ func (s *Store) Read(key string) (string, error) {
 		return "", ErrKeyNotFound(key)
 	}
 
-	length := s.log[key].length
-	offset := s.log[key].offset
+	length := s.log[key].Length
+	offset := s.log[key].Offset
 
 	readBuffer := make([]byte, length)
 
@@ -107,6 +145,26 @@ func (s *Store) Delete(key string) error {
 	return nil
 }
 
+func (s *Store) Close() error {
+	defer s.file.Close()
+	defer s.snapshot.Close()
+
+	buffer := new(bytes.Buffer)
+	encoder := gob.NewEncoder(buffer)
+
+	err := encoder.Encode(s.log)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.snapshot.Write(buffer.Bytes())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func parsePairFromBuffer(buffer []byte) (pair, error) {
 	entry := strings.Split(string(buffer), ":::")
 	if len(entry) != 2 {
@@ -119,12 +177,24 @@ func parsePairFromBuffer(buffer []byte) (pair, error) {
 	return pair{key: key, value: trimmedValue}, nil
 }
 
+func fileExists(path string) bool {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+
+	return false
+}
+
+func snapshotFileFromPath(path string) string {
+	return fmt.Sprintf("%v.snapshot", path)
+}
+
 type pair struct {
 	key   string
 	value string
 }
 
 type logEntry struct {
-	offset int
-	length int
+	Offset int
+	Length int
 }

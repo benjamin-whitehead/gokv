@@ -26,11 +26,29 @@ func TestCreateStoreFromFile(t *testing.T) {
 
 	t.Run("existing store is recreated", func(t *testing.T) {
 		store := storeWithPairs(t, pair{key: "hello", value: "world"})
+
+		err := store.Close()
+		assertNoError(t, err)
+
+		storeFile := store.file.Name()
+
+		recreatedStore, err := NewStoreFromFile(storeFile)
+		assertNoError(t, err)
+
+		value, err := recreatedStore.Read("hello")
+		assertNoError(t, err)
+		if value != "world" {
+			t.Errorf("expected to read value %v, got %v", "world", value)
+		}
+	})
+
+	t.Run("recreate store without closing gives error", func(t *testing.T) {
+		store := storeWithPairs(t, pair{key: "hello", value: "world"})
+
 		storeFile := store.file.Name()
 
 		_, err := NewStoreFromFile(storeFile)
-		assertNoError(t, err)
-
+		assertError(t, err, ErrFileNotFound(storeFile))
 	})
 
 }
