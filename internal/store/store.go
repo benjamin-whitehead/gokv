@@ -8,9 +8,11 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 )
 
 type Store struct {
+	sync.RWMutex
 	file     *os.File
 	snapshot *os.File
 	log      map[string]logEntry
@@ -83,6 +85,9 @@ func NewStoreFromFile(path string) (*Store, error) {
 }
 
 func (s *Store) Write(key string, value string) error {
+	s.Lock()
+	defer s.Unlock()
+
 	entry := []byte(fmt.Sprintf("%s:::%s\n", key, value))
 	_, err := s.file.Write(entry)
 	if err != nil {
@@ -103,6 +108,9 @@ func (s *Store) Write(key string, value string) error {
 }
 
 func (s *Store) Read(key string) (string, error) {
+	s.RLock()
+	defer s.RUnlock()
+
 	if _, ok := s.log[key]; !ok {
 		return "", ErrKeyNotFound(key)
 	}
@@ -136,6 +144,9 @@ func (s *Store) Read(key string) (string, error) {
 }
 
 func (s *Store) Delete(key string) error {
+	s.Lock()
+	defer s.Unlock()
+
 	if _, ok := s.log[key]; !ok {
 		return ErrKeyNotFound(key)
 	}
@@ -179,10 +190,10 @@ func parsePairFromBuffer(buffer []byte) (pair, error) {
 
 func fileExists(path string) bool {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return true
+		return false
 	}
 
-	return false
+	return true
 }
 
 func snapshotFileFromPath(path string) string {

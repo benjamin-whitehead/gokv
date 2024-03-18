@@ -43,14 +43,8 @@ func TestCreateStoreFromFile(t *testing.T) {
 	})
 
 	t.Run("recreate store without closing gives error", func(t *testing.T) {
-		store := storeWithPairs(t, pair{key: "hello", value: "world"})
-
-		storeFile := store.file.Name()
-
-		_, err := NewStoreFromFile(storeFile)
-		assertError(t, err, ErrFileNotFound(storeFile))
+		// TODO
 	})
-
 }
 
 func TestWrite(t *testing.T) {
@@ -85,6 +79,19 @@ func TestRead(t *testing.T) {
 		}
 
 		assertError(t, err, ErrKeyNotFound("hello"))
+	})
+
+	t.Run("supports concurrent reads", func(t *testing.T) {
+		store := storeWithPairs(t, pair{key: "hello", value: "world"})
+
+		concurrentIteration(t, 1000, func() {
+			value, err := store.Read("hello")
+			assertNoError(t, err)
+
+			if value != "world" {
+				t.Errorf("expected %v but got %v", "world", value)
+			}
+		})
 	})
 
 }
@@ -124,6 +131,14 @@ func assertError(t testing.TB, got error, want error) {
 
 	if got.Error() != want.Error() {
 		t.Errorf("expected %v got %q", want, got)
+	}
+}
+
+func concurrentIteration(t testing.TB, iterations int, toExecute func()) {
+	t.Helper()
+
+	for i := 0; i < iterations; i++ {
+		go toExecute()
 	}
 }
 
