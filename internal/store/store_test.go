@@ -41,10 +41,6 @@ func TestCreateStoreFromFile(t *testing.T) {
 			t.Errorf("expected to read value %v, got %v", "world", value)
 		}
 	})
-
-	t.Run("recreate store without closing gives error", func(t *testing.T) {
-		// TODO
-	})
 }
 
 func TestWrite(t *testing.T) {
